@@ -145,6 +145,13 @@ int fader5(const char *path, const char *types, lo_arg **argv, int argc,
 	State::theState.update();
 	return 0;
 }
+int cursor(const char *path, const char *types, lo_arg **argv, int argc,
+		void *data, void *user_data) {
+	State::theState.clear();
+	State::theState.out[uint8_t(argv[0]->f)] = uint16_t(argv[1]->f * 2048);
+	State::theState.update();
+	return 0;
+}
 
 int toggle1(const char *path, const char *types, lo_arg **argv, int argc,
 		void *data, void *user_data) {
@@ -161,66 +168,30 @@ int toggle2(const char *path, const char *types, lo_arg **argv, int argc,
 	State::theState.update();
 	return 0;
 }
+int trigger(const char *path, const char *types, lo_arg **argv, int argc,
+		void *data, void *user_data) {
+	State::theState.clear();
+	State::theState.out[uint8_t(argv[0]->f)] = 4095;
+	State::theState.update();
+	return 0;
+}
 
 int main(int argc, char **argv) {
-	lo_server_thread st = lo_server_thread_new("7770", error);
-	lo_server_thread_add_method(st, NULL, NULL, generic_handler, NULL);
+	lo_server_thread st = lo_server_thread_new("57120", error);
+	//lo_server_thread_add_method(st, NULL, NULL, generic_handler, NULL);
 	lo_server_thread_add_method(st, "/1/fader1", "f", fader1, NULL);
 	lo_server_thread_add_method(st, "/1/fader2", "f", fader2, NULL);
 	lo_server_thread_add_method(st, "/1/fader3", "f", fader3, NULL);
 	lo_server_thread_add_method(st, "/1/fader4", "f", fader4, NULL);
 	lo_server_thread_add_method(st, "/1/fader5", "f", fader5, NULL);
+	//lo_server_thread_add_method(st, "/cursor", "ffffff", fader5, NULL);
 	lo_server_thread_add_method(st, "/1/toggle1", "f", toggle1, NULL);
 	lo_server_thread_add_method(st, "/1/toggle2", "f", toggle2, NULL);
-
+	lo_server_thread_add_method(st, "/trigger", "fffff", trigger, NULL);
 	lo_server_thread_start(st);
 	setup();
 
 	while (1) {
-		/*
-		 for (int c = 0; c < 5; c++) {
-		 for (uint8_t i = 0; i < 48; i++) {
-		 aState.out[i] = 4095;
-		 aState.update();
-		 aState.transfer();
-		 bcm2835_delay(5);
-		 }
-		 for (int i = 48; 0 <= i; i--) {
-		 aState.out[i] = 0;
-		 aState.update();
-		 aState.transfer();
-		 bcm2835_delay(5);
-		 }
-		 for (int i = 48; 0 <= i; i--) {
-		 aState.out[i] = 4095;
-		 aState.update();
-		 aState.transfer();
-		 bcm2835_delay(5);
-		 }
-		 for (uint8_t i = 0; i < 48; i++) {
-		 aState.out[i] = 0;
-		 aState.update();
-		 aState.transfer();
-		 bcm2835_delay(5);
-		 }
-
-		 }
-		 for (int c = 0; c < 5; c++) {
-		 for (uint8_t i = 0; i < 48; i++) {
-		 aState.clear();
-		 aState.out[i] = 4095;
-		 aState.update();
-		 aState.transfer();
-		 bcm2835_delay(20);
-		 }
-		 for (int i = 48; 0 <= i; i--) {
-		 aState.clear();
-		 aState.out[i] = 4095;
-		 aState.update();
-		 aState.transfer();
-		 bcm2835_delay(20);
-		 }
-		 }*/
 		bcm2835_delay(1);
 	}
 
