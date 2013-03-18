@@ -28,6 +28,9 @@ extern "C" {
 #include <bcm2835.h>
 }
 #include <iostream>
+#include "lo/lo.h"
+#include <stdio.h>
+
 using namespace std;
 #define PIN RPI_GPIO_P1_11
 
@@ -39,12 +42,13 @@ void setup() {
 	bcm2835_spi_begin();
 	bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);  // The default
 	bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);               // The default
-	bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_64); // The default
+	bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_32); // The default
 	bcm2835_spi_chipSelect(BCM2835_SPI_CS_NONE);              // The default
 }
 
 class State {
 public:
+	static State theState;
 	uint16_t out[48];
 	uint8_t spi[72];
 	State() {
@@ -60,16 +64,24 @@ public:
 			spi[j + 1] = out[i] << 4 | out[i - 1] >> 8;
 			spi[j + 2] = out[i - 1] & 0xFF;
 		}
+		spi[j] = out[1] >> 4;
+		spi[j + 1] = out[1] << 4 | out[0] >> 8;
+		spi[j + 2] = out[0] & 0xFF;
+		transfer();
 	}
+	void clear() {
+		for (uint8_t i = 0; i < 48; i++)
+			out[i] = 0;
+		update();
+	}
+	void full() {
+		for (uint8_t i = 0; i < 48; i++)
+			out[i] = 4095;
+		update();
+	}
+
 	void transfer() {
-		bcm2835_spi_begin();
-		bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST); // The default
-		bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);           // The default
-		bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_64); // The default
-		bcm2835_spi_chipSelect(BCM2835_SPI_CS_NONE);          // The default
-		for (int i = 0; i < 72; i++)
-			bcm2835_spi_transfer(spi[i]);
-		bcm2835_spi_end();
+		bcm2835_spi_transfern((char*) spi, 72);
 		bcm2835_delayMicroseconds(5);
 		bcm2835_gpio_write(PIN, HIGH);
 		bcm2835_delayMicroseconds(1);
@@ -78,26 +90,142 @@ public:
 	}
 };
 
-int main(int argc, char **argv) {
-	setup();
+State State::theState;
 
-	State aState;
-	aState.out[47] = 4095;
-	aState.out[46] = 2047;
-	aState.out[45] = 1023;
-	aState.out[44] = 511;
-	aState.out[43] = 255;
-	aState.out[42] = 127;
-	aState.out[41] = 63;
-	aState.out[40] = 31;
-	aState.update();
-	for (int i = 47; 39 < i; i--)
-		cout << std::hex << (int) aState.out[i] << ' ';
-	cout << endl;
-	for (int i = 0; i < 16; i++)
-		cout << std::hex << (int) aState.spi[i] << ' ';
-	cout << endl;
-	bcm2835_close();
+int done = 0;
+void error(int num, const char *m, const char *path) {
+	cout << "liblo server error" << num << "in path" << path << " : " << m
+			<< endl;
+}
+
+int generic_handler(const char *path, const char *types, lo_arg **argv,
+		int argc, void *data, void *user_data) {
+	int i;
+
+	printf("path: <%s>\n", path);
+	for (i = 0; i < argc; i++) {
+		printf("arg %d '%c' ", i, types[i]);
+		lo_arg_pp((lo_type) types[i], (void*) argv[i]);
+		printf("\n");
+	}
+	printf("\n");
+	fflush(stdout);
+
+	return 1;
+}
+
+int fader1(const char *path, const char *types, lo_arg **argv, int argc,
+		void *data, void *user_data) {
+	State::theState.out[0] = uint16_t(argv[0]->f * 4095);
+	State::theState.update();
+	return 0;
+}
+int fader2(const char *path, const char *types, lo_arg **argv, int argc,
+		void *data, void *user_data) {
+	State::theState.out[1] = uint16_t(argv[0]->f * 4095);
+	State::theState.update();
+	return 0;
+}
+int fader3(const char *path, const char *types, lo_arg **argv, int argc,
+		void *data, void *user_data) {
+	State::theState.out[2] = uint16_t(argv[0]->f * 4095);
+	State::theState.update();
+	return 0;
+}
+int fader4(const char *path, const char *types, lo_arg **argv, int argc,
+		void *data, void *user_data) {
+	State::theState.out[3] = uint16_t(argv[0]->f * 4095);
+	State::theState.update();
+	return 0;
+}
+int fader5(const char *path, const char *types, lo_arg **argv, int argc,
+		void *data, void *user_data) {
+	for (uint8_t i = 0; i < 48; i++)
+		State::theState.out[i] = uint16_t(argv[0]->f * 4095);
+	State::theState.update();
 	return 0;
 }
 
+int toggle1(const char *path, const char *types, lo_arg **argv, int argc,
+		void *data, void *user_data) {
+	if (argv[0]->f < 0.5f)
+		State::theState.clear();
+	else
+		State::theState.full();
+	return 0;
+}
+int toggle2(const char *path, const char *types, lo_arg **argv, int argc,
+		void *data, void *user_data) {
+	for (uint8_t i = 0; i < 48; i++)
+		State::theState.out[i] = 128;
+	State::theState.update();
+	return 0;
+}
+
+int main(int argc, char **argv) {
+	lo_server_thread st = lo_server_thread_new("7770", error);
+	lo_server_thread_add_method(st, NULL, NULL, generic_handler, NULL);
+	lo_server_thread_add_method(st, "/1/fader1", "f", fader1, NULL);
+	lo_server_thread_add_method(st, "/1/fader2", "f", fader2, NULL);
+	lo_server_thread_add_method(st, "/1/fader3", "f", fader3, NULL);
+	lo_server_thread_add_method(st, "/1/fader4", "f", fader4, NULL);
+	lo_server_thread_add_method(st, "/1/fader5", "f", fader5, NULL);
+	lo_server_thread_add_method(st, "/1/toggle1", "f", toggle1, NULL);
+	lo_server_thread_add_method(st, "/1/toggle2", "f", toggle2, NULL);
+
+	lo_server_thread_start(st);
+	setup();
+
+	while (1) {
+		/*
+		 for (int c = 0; c < 5; c++) {
+		 for (uint8_t i = 0; i < 48; i++) {
+		 aState.out[i] = 4095;
+		 aState.update();
+		 aState.transfer();
+		 bcm2835_delay(5);
+		 }
+		 for (int i = 48; 0 <= i; i--) {
+		 aState.out[i] = 0;
+		 aState.update();
+		 aState.transfer();
+		 bcm2835_delay(5);
+		 }
+		 for (int i = 48; 0 <= i; i--) {
+		 aState.out[i] = 4095;
+		 aState.update();
+		 aState.transfer();
+		 bcm2835_delay(5);
+		 }
+		 for (uint8_t i = 0; i < 48; i++) {
+		 aState.out[i] = 0;
+		 aState.update();
+		 aState.transfer();
+		 bcm2835_delay(5);
+		 }
+
+		 }
+		 for (int c = 0; c < 5; c++) {
+		 for (uint8_t i = 0; i < 48; i++) {
+		 aState.clear();
+		 aState.out[i] = 4095;
+		 aState.update();
+		 aState.transfer();
+		 bcm2835_delay(20);
+		 }
+		 for (int i = 48; 0 <= i; i--) {
+		 aState.clear();
+		 aState.out[i] = 4095;
+		 aState.update();
+		 aState.transfer();
+		 bcm2835_delay(20);
+		 }
+		 }*/
+		bcm2835_delay(1);
+	}
+
+	bcm2835_spi_end();
+	bcm2835_close();
+	lo_server_thread_free(st);
+	return 0;
+}
