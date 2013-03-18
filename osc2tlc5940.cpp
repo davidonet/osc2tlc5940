@@ -32,9 +32,15 @@ using namespace std;
 #define PIN RPI_GPIO_P1_11
 
 void setup() {
-	bcm2835_set_debug(1);
+	//bcm2835_set_debug(1);
 	bcm2835_init();
 	bcm2835_gpio_fsel(PIN, BCM2835_GPIO_FSEL_OUTP);
+	bcm2835_gpio_write(PIN, LOW);
+	bcm2835_spi_begin();
+	bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);  // The default
+	bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);               // The default
+	bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_64); // The default
+	bcm2835_spi_chipSelect(BCM2835_SPI_CS_NONE);              // The default
 }
 
 class State {
@@ -55,25 +61,26 @@ public:
 			spi[j + 2] = out[i - 1] & 0xFF;
 		}
 	}
+	void transfer() {
+		bcm2835_spi_begin();
+		bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST); // The default
+		bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);           // The default
+		bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_64); // The default
+		bcm2835_spi_chipSelect(BCM2835_SPI_CS_NONE);          // The default
+		for (int i = 0; i < 72; i++)
+			bcm2835_spi_transfer(spi[i]);
+		bcm2835_spi_end();
+		bcm2835_delayMicroseconds(5);
+		bcm2835_gpio_write(PIN, HIGH);
+		bcm2835_delayMicroseconds(1);
+		bcm2835_gpio_write(PIN, LOW);
+		bcm2835_delayMicroseconds(5);
+	}
 };
 
 int main(int argc, char **argv) {
-	/*	setup();
+	setup();
 
-	 bcm2835_spi_begin();
-	 bcm2835_spi_setBitOrder(BCM2835_SPI_BIT_ORDER_MSBFIRST);  // The default
-	 bcm2835_spi_setDataMode(BCM2835_SPI_MODE0);               // The default
-	 bcm2835_spi_setClockDivider(BCM2835_SPI_CLOCK_DIVIDER_64); // The default
-	 bcm2835_spi_chipSelect(BCM2835_SPI_CS_NONE);              // The default
-
-	 // Send a byte to the slave and simultaneously read a byte back from the slave
-	 // If you tie MISO to MOSI, you should read back what was sent
-	 uint8_t data = bcm2835_spi_transfer(0x23);
-	 std::cout << "Received : " << data << std::endl;
-
-	 bcm2835_spi_end();
-	 bcm2835_close();
-	 */
 	State aState;
 	aState.out[47] = 4095;
 	aState.out[46] = 2047;
@@ -90,7 +97,7 @@ int main(int argc, char **argv) {
 	for (int i = 0; i < 16; i++)
 		cout << std::hex << (int) aState.spi[i] << ' ';
 	cout << endl;
-
+	bcm2835_close();
 	return 0;
 }
 
